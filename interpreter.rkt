@@ -201,7 +201,7 @@
                                                                       (value-of (caddr tree) env check)) (value-of (cadddr tree) env check) env check))]
              [(equal? first 'def-with-no-param-stmt (list 'def-value 'none (extend-env (cadr tree) (list (cadddr tree) `())
                                                                                        (value-of (caddr tree) env check))))]
-       ;     [(equal? first 'param-with-default) (extend-env (value-of (cadr tree) env check) (empty-env))]
+            [(equal? first 'param-with-default) (extend-env (value-of (cadr tree) env check) (empty-env))]
         ;     [(equal? first 'params) (extend-env (value-of (cadr tree) env check) (extend-env (value-of (caddr tree) env check)))]
          ;    [(equal? first 'id) (cadr tree)]
           ;   [(equal? first 'bool-value) tree]
