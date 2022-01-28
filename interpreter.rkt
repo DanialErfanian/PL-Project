@@ -140,7 +140,7 @@
      ((primary open-close-paranthesis) (list 'primary-no-arg $1))
      ((primary open-paranthesis arguments close-paranthesis) (list 'primary-with-args $1 $3)))
     (arguments
-     ((expression) (list 'expression $1))
+     ((expression) $1)
      ((arguments comma expression) (list 'arguments (list 'expression $3) (list 'arguments $1))))
     (atom
      ((ID) (list 'id $1))
@@ -192,8 +192,8 @@
              [(equal? first 'assignment) (let ([left-value (cadr tree)]
                                                [right-expression (caddr tree)])
                                            (if (equal? (car left-value 'id-with-type))
-                                                       ('assignment-value 'none (extend-env (cadr left-value) right-expression (caddr left-value) env))
-                                                       ('assignment-value 'none (extend-env (cadr left-value) right-expression "undefined" env))))]
+                                                       (list 'assignment-value 'none (extend-env (cadr left-value) right-expression (caddr left-value) env))
+                                                       (list 'assignment-value 'none (extend-env (cadr left-value) right-expression "undefined" env))))]
              [(equal? first 'return) ('return-value 'none "None" env)]
              [(equal? first 'return-stmt ('return-value (cadr tree)))]
              [(equal? first 'def-stmt) (list 'def-value 'none
@@ -206,13 +206,38 @@
              [(equal? first 'param-assignment-lhs) (let ([left-value (cadr tree)]
                                                          [right-exp (caddr tree)])
                                                      (list (cadr left-value) right-exp (caddr left-value)))]
-             [(equal? first 'if-stmt) (let ([v1 (value-of (cadr tree))])
+             [(equal? first 'if-stmt) (let ([v1 (value-of (cadr tree) env check)])
                                        (if (equal? (car v1) 'bool-value)
                                            (if (equal? (cadr v1) "True")
-                                               (value-of (caddr tree))
-                                               (value-of (cadddr tree)))
+                                               (value-of (caddr tree) env check)
+                                               (value-of (cadddr tree) env check))
                                            (error "error: condition should be a bool value")))]
-         ;    [(equal? first 'for-stmt) (let ([v1 (value-of 
+             [(equal? first 'lst) tree]
+             [(equal? first 'for-stmt) (let ([v1 (value-of (cadr tree) env check)])
+                                         (if (null? (cdr v1))
+                                             (value-of (cadddr tree) env check)
+                                             (value-of (list 'for-stmt (cadr tree) (append (list 'lst) (cdr v1))
+                                                             (caddr (value-of (cadddr tree) env check))))))]
+             [(equal? first 'dis-or-con) (let ([v1 (value-of (cadr tree) env check)]
+                                               [v2 (value-of (caddr tree) env check)])
+                                           (if (and (equal? (car v1) 'bool-value)
+                                                    (equal? (car v2) 'bool-value))
+                                               (if (or (equal? (cadr v1) "True")
+                                                        (equal? (cadr v2) "True"))
+                                                        (list 'bool-value "True")
+                                                        (list 'bool-value "False"))
+                                               (error "error: values of or operator should be bool values!")))]
+             [(equal? first 'con-and-inv) (let ([v1 (value-of (cadr tree) env check)]
+                                               [v2 (value-of (caddr tree) env check)])
+                                           (if (and (equal? (car v1) 'bool-value)
+                                                    (equal? (car v2) 'bool-value))
+                                               (if (and (equal? (cadr v1) "True")
+                                                        (equal? (cadr v2) "True"))
+                                                        (list 'bool-value "True")
+                                                        (list 'bool-value "False"))
+                                               (error "error: values of or operator should be bool values!")))]
+             
+                                             
          ;    [(equal? first 'id) (cadr tree)]
           ;   [(equal? first 'bool-value) tree]
            ;  [(equal? first 'none) tree]
