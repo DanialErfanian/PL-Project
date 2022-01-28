@@ -94,7 +94,7 @@
     (if-stmt
      ((if expression colon statements else-block) (list 'if-stmt $2 $4 $5)))
     (else-block
-     ((else colon statements) (list 'else $3)))
+     ((else colon statements) $3))
     (for-stmt
      ((for ID in expression colon statements) (list 'for-stmt $2 $4 $6)))
     (expression
@@ -126,7 +126,7 @@
     (term
      ((term mult factor) (list 'multnumbers $1 $3))
      ((term div factor) (list 'divnumbers $1 $3))
-     ((factor) $1)
+     ((factor) $1))
     (factor
      ((plus factor) (list 'plus-factor $2))
      ((minus factor) (list 'negate-factor $2))
@@ -206,7 +206,13 @@
              [(equal? first 'param-assignment-lhs) (let ([left-value (cadr tree)]
                                                          [right-exp (caddr tree)])
                                                      (list (cadr left-value) right-exp (caddr left-value)))]
-           ;  [(equal? first if-stmt) (let ([v1 
+             [(equal? first 'if-stmt) (let ([v1 (value-of (cadr tree))])
+                                       (if (equal? (car v1) 'bool-value)
+                                           (if (equal? (cadr v1) "True")
+                                               (value-of (caddr tree))
+                                               (value-of (cadddr tree)))
+                                           (error "error: condition should be a bool value")))]
+         ;    [(equal? first 'for-stmt) (let ([v1 (value-of 
          ;    [(equal? first 'id) (cadr tree)]
           ;   [(equal? first 'bool-value) tree]
            ;  [(equal? first 'none) tree]
@@ -218,6 +224,6 @@
 
 ;test
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
-(define my-lexer (lex-this simple-math-lexer (open-input-string "if True: a = 3 + 4; else: b = 2;;")))
+(define my-lexer (lex-this simple-math-lexer (open-input-string "if True: a = b + 4; else: b = 2;;")))
 (let ((parser-res (parse my-lexer))) parser-res)
 
