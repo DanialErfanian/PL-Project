@@ -101,10 +101,10 @@
      ((disjunction) $1)
      ((sum) $1))
     (disjunction
-     ((conjunction) (list 'conjunction $1))
+     ((conjunction) $1)
      ((disjunction or conjunction) (list 'dis-or-con $1 $3)))
     (conjunction
-     ((inversion) (list 'inversion $1))
+     ((inversion) $1)
      ((conjunction and inversion) (list 'con-and-inv $1 $3)))
     (inversion
      ((not inversion) (list 'not-inv $2))
@@ -126,14 +126,14 @@
     (term
      ((term mult factor) (list 'multnumbers $1 $3))
      ((term div factor) (list 'divnumbers $1 $3))
-     ((factor) (list 'factor $1)))
+     ((factor) $1)
     (factor
      ((plus factor) (list 'plus-factor $2))
      ((minus factor) (list 'negate-factor $2))
-     ((power) (list 'power $1)))
+     ((power) $1))
     (power
      ((atom power-sign factor) (list 'powernumbers $1 $3))
-     ((primary) (list 'primary $1)))
+     ((primary) $1))
     (primary
      ((atom) $1)
      ((primary open-bracket expression close-bracket) (list 'primary-exp $1 $3))
@@ -157,8 +157,8 @@
     (expressions
      ((expressions comma expression) (list 'expressions (list 'expressions $1) (list 'expressions $3))))
     (assignment-lhs
-     ((ID) (list 'id $1))
-     ((ID colon type) (list 'id-with-type $1 $3)))
+     ((ID) (list 'id-value $1 "undefined"))
+     ((ID colon type) (list 'id-value $1 $3)))
     (return-type
      ((colon) (list 'no-retrun-type))
      ((arrow type colon) (list 'return-type $2)))
@@ -202,7 +202,11 @@
              [(equal? first 'def-with-no-param-stmt (list 'def-value 'none (extend-env (cadr tree) (list (cadddr tree) `())
                                                                                        (value-of (caddr tree) env check))))]
             [(equal? first 'param-with-default) (extend-env (value-of (cadr tree) env check) (empty-env))]
-        ;     [(equal? first 'params) (extend-env (value-of (cadr tree) env check) (extend-env (value-of (caddr tree) env check)))]
+             [(equal? first 'params) (extend-env (value-of (cadr tree) env check) (value-of (caddr tree) env check))]
+             [(equal? first 'param-assignment-lhs) (let ([left-value (cadr tree)]
+                                                         [right-exp (caddr tree)])
+                                                     (list (cadr left-value) right-exp (caddr left-value)))]
+           ;  [(equal? first if-stmt) (let ([v1 
          ;    [(equal? first 'id) (cadr tree)]
           ;   [(equal? first 'bool-value) tree]
            ;  [(equal? first 'none) tree]
@@ -214,6 +218,6 @@
 
 ;test
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
-(define my-lexer (lex-this simple-math-lexer (open-input-string "X = 2 ;")))
+(define my-lexer (lex-this simple-math-lexer (open-input-string "if True: a = 3 + 4; else: b = 2;;")))
 (let ((parser-res (parse my-lexer))) parser-res)
 
