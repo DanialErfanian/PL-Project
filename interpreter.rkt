@@ -65,8 +65,8 @@
      ((statements) (append $1 #f))
      ((checked statements) (append $2 #t)))
     (statements
-     ((statement semicolon) (list 'statement $1))
-     ((statements statement semicolon) (list 'statements (list 'statements $1) (list 'statement $2))))
+     ((statement semicolon) $1)
+     ((statements statement semicolon) (list 'statements $1 $2)))
     (statement
      ((compound-stmt) $1)
      ((simple-stmt) $1))
@@ -87,10 +87,10 @@
      ((def ID open-paranthesis params close-paranthesis return-type statements) (list 'def-stmt $2 $4 $6 $7))
      ((def ID open-close-paranthesis return-type statements) (list 'def-with-no-param-stmt $2 $4 $5)))
     (params
-     ((param-with-default) (list 'param-with-default $1))
+     ((param-with-default) $1)
      ((params comma param-with-default) (list 'params (list 'params $1) (list 'param-with-default $3))))
     (param-with-default
-     ((assignment-lhs assign expression) (list 'param-assignment-lhs $1 $3)))
+     ((assignment-lhs assign expression) (list 'param-assignment $1 $3)))
     (if-stmt
      ((if expression colon statements else-block) (list 'if-stmt $2 $4 $5)))
     (else-block
@@ -108,11 +108,11 @@
      ((conjunction and inversion) (list 'con-and-inv $1 $3)))
     (inversion
      ((not inversion) (list 'not-inv $2))
-     ((comparison) (list 'comparison $1)))
+     ((comparison) $1))
     (comparison
-     ((eq-sum) (list 'eq-sum $1))
-     ((lt-sum) (list 'lt-sum $1))
-     ((gt-sum) (list 'gt-sum $1)))
+     ((eq-sum) $1)
+     ((lt-sum) $1)
+     ((gt-sum) $1))
     (eq-sum
      ((sum equals sum) (list 'equals $1 $3)))
     (lt-sum
@@ -120,9 +120,9 @@
     (gt-sum
      ((sum greater-than sum) (list 'greater-than $1 $3)))
     (sum
-     ((sum plus term) (list 'plusnumbers $1 $3))
-     ((sum minus term) (list 'minusnumbers $1 $3))
-     ((term) (list 'term $1)))
+     ((sum plus term) (list 'plus $1 $3))
+     ((sum minus term) (list 'minus $1 $3))
+     ((term) $1))
     (term
      ((term mult factor) (list 'multnumbers $1 $3))
      ((term div factor) (list 'divnumbers $1 $3))
@@ -187,25 +187,23 @@
              [(equal? first 'statements) (let ([v1 (value-of (cadr tree) env check)])
                                           (if (equal? (car v1) 'return-value)
                                              v1
-                                             (value-of (caddr tree) (cadr v1) check)))]
-             [(equal? first 'statement) (value-of (cadr tree) env check)]
+                                             (value-of (caddr tree) (caddr v1) check)))]
              [(equal? first 'assignment) (let ([left-value (cadr tree)]
                                                [right-expression (caddr tree)])
-                                           (if (equal? (car left-value 'id-with-type))
-                                                       (list 'assignment-value 'none (extend-env (cadr left-value) right-expression (caddr left-value) env))
-                                                       (list 'assignment-value 'none (extend-env (cadr left-value) right-expression "undefined" env))))]
-             [(equal? first 'return) ('return-value 'none "None" env)]
-             [(equal? first 'return-stmt ('return-value (cadr tree)))]
+                                                       (list 'assignment-value 'none (extend-env (cadr left-value) right-expression (caddr left-value) env)))]
+             [(equal? first 'return) (list 'return-value (list "None" "None"))]
+             [(equal? first 'return-stmt (list 'return-value (value-of (cadr tree))))]
+             [(equal? first 'pass) (list 'return-value (list "None" "None"))]
              [(equal? first 'def-stmt) (list 'def-value 'none
                                              (extend-env (cadr tree) (list (cadr (cdddr tree))
                                                                       (value-of (caddr tree) env check)) (value-of (cadddr tree) env check) env check))]
-             [(equal? first 'def-with-no-param-stmt (list 'def-value 'none (extend-env (cadr tree) (list (cadddr tree) `())
+             [(equal? first 'def-with-no-param-stmt (list 'def-value 'none (extend-env (cadr tree) (list (cadddr tree) (empty-env))
                                                                                        (value-of (caddr tree) env check))))]
-            [(equal? first 'param-with-default) (extend-env (value-of (cadr tree) env check) (empty-env))]
-             [(equal? first 'params) (extend-env (value-of (cadr tree) env check) (value-of (caddr tree) env check))]
-             [(equal? first 'param-assignment-lhs) (let ([left-value (cadr tree)]
+             [(equal? first 'param-with-default) (value-of (cadr tree) env check)]
+             [(equal? first 'params) (append (value-of (cadr tree) env check) (value-of (caddr tree) env check))]
+             [(equal? first 'param-assignment) (let ([left-value (cadr tree)]
                                                          [right-exp (caddr tree)])
-                                                     (list (cadr left-value) right-exp (caddr left-value)))]
+                                                     (extend-env (cadr left-value) right-exp (caddr left-value) (empty-env)))]
              [(equal? first 'if-stmt) (let ([v1 (value-of (cadr tree) env check)])
                                        (if (equal? (car v1) 'bool-value)
                                            (if (equal? (cadr v1) "True")
@@ -213,11 +211,11 @@
                                                (value-of (cadddr tree) env check))
                                            (error "error: condition should be a bool value")))]
              [(equal? first 'lst) tree]
-             [(equal? first 'for-stmt) (let ([v1 (value-of (cadr tree) env check)])
+             [(equal? first 'for-stmt) (let ([v1 (value-of (caddr tree) env check)])
                                          (if (null? (cdr v1))
                                              (value-of (cadddr tree) env check)
-                                             (value-of (list 'for-stmt (cadr tree) (append (list 'lst) (cdr v1))
-                                                             (caddr (value-of (cadddr tree) env check))))))]
+                                             (value-of (list 'for-stmt (cadr tree) (append (list 'lst) (cddr v1)) (cadddr tree))
+                                                             (extend-env (caddr (value-of (cadddr tree) env check)) env))))]
              [(equal? first 'dis-or-con) (let ([v1 (value-of (cadr tree) env check)]
                                                [v2 (value-of (caddr tree) env check)])
                                            (if (and (equal? (car v1) 'bool-value)
@@ -226,7 +224,7 @@
                                                         (equal? (cadr v2) "True"))
                                                         (list 'bool-value "True")
                                                         (list 'bool-value "False"))
-                                               (error "error: values of or operator should be bool values!")))]
+                                               (error "error: arguments of or operator should be bool values!")))]
              [(equal? first 'con-and-inv) (let ([v1 (value-of (cadr tree) env check)]
                                                [v2 (value-of (caddr tree) env check)])
                                            (if (and (equal? (car v1) 'bool-value)
@@ -235,7 +233,79 @@
                                                         (equal? (cadr v2) "True"))
                                                         (list 'bool-value "True")
                                                         (list 'bool-value "False"))
-                                               (error "error: values of or operator should be bool values!")))]
+                                               (error "error: arguments of and operator should be bool values!")))]
+             [(equal? first 'not-inv) (let ([v1 (value-of (cadr tree) env check)])
+                                       (if (equal? (car v1) 'bool-value)
+                                           (if (equal? (cadr v1) "True")
+                                               (list 'bool-value "False")
+                                               (list 'bool-value "True"))
+                                           (error "error: argument of not operator should be a bool value!")))] 
+             [(equal? first 'equals) (let ([v1 (value-of (cadr tree) env check)]
+                                           [v2 (value-of (caddr tree) env check)])
+                                       (if (and
+                                            (or (equal? (car v1) 'int-value) (equal? (car v1) 'float-value))
+                                            (or (equal? (car v2) 'int-value) (equal? (car v2) 'float-value)))
+                                       (if (= (cadr v1) (cadr v2))
+                                           (list 'bool-value "True")
+                                           (list 'bool-value "False"))
+                                       (error "error: arguments of == are not the same type or not numeric")))]
+             [(equal? first 'less-than) (let ([v1 (value-of (cadr tree) env check)]
+                                           [v2 (value-of (caddr tree) env check)])
+                                       (if (and
+                                            (or (equal? (car v1) 'int-value) (equal? (car v1) 'float-value))
+                                            (or (equal? (car v2) 'int-value) (equal? (car v2) 'float-value)))
+                                       (if (< (cadr v1) (cadr v2))
+                                           (list 'bool-value "True")
+                                           (list 'bool-value "False"))
+                                       (error "error: arguments of < are not the same type or not numeric")))]
+             [(equal? first 'greater-than) (let ([v1 (value-of (cadr tree) env check)]
+                                           [v2 (value-of (caddr tree) env check)])
+                                       (if (and
+                                            (or (equal? (car v1) 'int-value) (equal? (car v1) 'float-value))
+                                            (or (equal? (car v2) 'int-value) (equal? (car v2) 'float-value)))
+                                       (if (> (cadr v1) (cadr v2))
+                                           (list 'bool-value "True")
+                                           (list 'bool-value "False"))
+                                       (error "error: arguments of == are not the same type or not numeric")))]
+             [(equal? first 'plus) (let ([v1 (value-of (cadr tree) env check)]
+                                           [v2 (value-of (caddr tree) env check)])
+                                    (if (and (equal? (car v1) 'int-value) (equal? (car v2) 'int-value))
+                                        (list 'int-value (+ (cadr v1) (cadr v2)))
+                                        (if (and (equal? (car v1) 'float-value) (equal? (car v2) 'float-value))
+                                            (list 'float-value (+ (cadr v1) (cadr v2)))
+                                            (if (and (equal? (car v1) 'lst) (equal? (car v2) 'lst))
+                                                (list 'lst (append (cadr v1) (cadr v2)))
+                                                (error "error: not appropariate type for plus operator")))))]
+             [(equal? first 'minus)  (let ([v1 (value-of (cadr tree) env check)]
+                                           [v2 (value-of (caddr tree) env check)])
+                                    (if (and (equal? (car v1) 'int-value) (equal? (car v2) 'int-value))
+                                        (list 'int-value (- (cadr v1) (cadr v2)))
+                                        (if (and (equal? (car v1) 'float-value) (equal? (car v2) 'float-value))
+                                            (list 'float-value (- (cadr v1) (cadr v2)))
+                                            (error "error: not appropariate type for minus operator"))))]
+             [(equal? first 'multnumbers) (let ([v1 (value-of (cadr tree) env check)])
+                                            (if (= (cadr v1) 0)
+                                                v1
+                                                (let ([v2 (value-of (caddr tree) env check)])
+                                                  (if (and (equal? (car v1) 'int-value) (equal? (car v2) 'int-value))
+                                                      (list 'int-value (* (cadr v1) (cadr v2)))
+                                                      (if (and (equal? (car v1) 'float-value) (equal? (car v2) 'float-value))
+                                                          (list 'float-value (* (cadr v1) (cadr v2)))
+                                                          (error "error:  not appropariate type for multiply operator"))))))]
+
+             [(equal? first 'divnumbers) (let ([v1 (value-of (cadr tree) env check)]
+                                               [v2 (value-of (caddr tree) env check)])
+                                           (if (= (cadr v2) 0) (error "division by zero")
+                                                  (if (and (equal? (car v1) 'int-value) (equal? (car v2) 'int-value))
+                                                      (list 'int-value (/ (cadr v1) (cadr v2)))
+                                                      (if (and (equal? (car v1) 'float-value) (equal? (car v2) 'float-value))
+                                                          (list 'float-value (/ (cadr v1) (cadr v2)))
+                                                          (error "error:  not appropariate type for multiply operator")))))]
+             
+                                  
+
+
+                                           
              
                                              
          ;    [(equal? first 'id) (cadr tree)]
