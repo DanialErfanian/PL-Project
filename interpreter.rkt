@@ -41,6 +41,7 @@
    ("pass" (token-pass))
    ("else" (token-else))
    ("None" (token-none))
+   ("print" (token-print))
    ((:or "int" "float" "bool" "list" "None") (token-type lexeme))
    ((:or "True" "False") (token-bool lexeme))
    ((:+ (:: (:or (char-range #\a #\z)
@@ -52,7 +53,7 @@
 (define-tokens non-empties (int float bool type ID))
 (define-empty-tokens empties (EOF plus minus semicolon mult div power-sign if assign return def no-arguments
                                  open-paranthesis close-paranthesis colon comma for in or and not equals less-than greater-than
-                                 open-bracket close-bracket open-close-paranthesis open-close-brackets arrow checked pass else none))
+                                 open-bracket close-bracket open-close-paranthesis open-close-brackets arrow checked pass else none print))
 
 (define parse
   (parser
@@ -69,7 +70,8 @@
      ((statements statement semicolon) (list 'statements $1 $2)))
     (statement
      ((compound-stmt) $1)
-     ((simple-stmt) $1))
+     ((simple-stmt) $1)
+     ((print open-paranthesis expression close-paranthesis) (list 'print $3)))
     (simple-stmt
      ((assignment) $1)
      ((return-stmt) $1)
@@ -136,11 +138,11 @@
      ((primary) $1))
     (primary
      ((atom) $1)
-     ((primary open-bracket expression close-bracket) (list 'primary-exp $1 $3))
+     ((primary open-bracket expression close-bracket) (list 'primary-expression $1 $3))
      ((primary open-close-paranthesis) (list 'primary-no-arg $1))
      ((primary open-paranthesis arguments close-paranthesis) (list 'primary-with-args $1 $3)))
     (arguments
-     ((expression) $1)
+     ((expression) (list 'argument $1))
      ((arguments comma expression) (list 'arguments $1 $3)))
     (atom
      ((ID) (list 'id $1))
@@ -152,10 +154,11 @@
      ((int) (list 'value $1 "int"))
      ((float) (list 'value $1 "float")))
     (lst
-     ((open-bracket expressions close-bracket) (list 'lst $2))
-     ((open-bracket close-bracket) (list 'lst `())))
+     ((open-bracket expressions close-bracket) $2)
+     ((open-bracket close-bracket) (list 'empty-list `())))
     (expressions
-     ((expressions comma expression) (list 'expressions $1 $3)))
+     ((expressions comma expression) (list 'expressions $1 $3))
+     ((expression) (list 'expression $1)))
     (assignment-lhs
      ((ID) (list 'id-value $1 "undefined"))
      ((ID colon type) (list 'id-value $1 $3)))
@@ -169,15 +172,52 @@
   (lambda ()
     `()))
 
+(struct function (output-type) #:transparent)
+
 (define extend-env
   (lambda (var val type env)
     (cons (list var val type) env)))
 
+(define change-value
+  (lambda (new-val old-val)
+    (list (car old-val) new-val (caddr old-val))))
+
 (define apply-env
- (lambda (var env)
-   (if (equal? var (caar env))
-       (car env)
-       (apply-env var (cdr env)))))
+  (lambda (var env check [args `()])
+    (if (equal? var "print")
+        (display (value-of (list 'id var) env check))
+    (if (equal? var (caar env))
+        (let ([elem (car env)])
+          (let ([type (caddr elem)])
+            (if (function? type)
+                (if (null? args)
+                    (let ([value (value-of (caadr elem) env check)])
+                      (if check
+                          (if (equal? type "undefined")
+                              value
+                              (if (equal? type (caddr value))
+                                  value
+                                  (error (string-append "error: type of " var " must be " type "."))))
+                          value))
+                    (let ([new-env (map change-value args (cadadr elem))])
+                      (let ([value (value-of (caadr elem) (append new-env env) check)])
+                        (if check
+                            (if (equal? type "undefined")
+                                value
+                                (if (equal? type (caddr value))
+                                    value
+                                    (error (string-append "error: type of " var " must be " type "."))))
+                            value))))
+                (let [(value (value-of (cadr elem) (cdr env) check))]
+                  (if check
+                      (if (equal? type "undefined")
+                          value
+                          (if (equal? type (caddr value))
+                              value
+                              (error (string-append "error: type of " var " must be " type "."))))
+                      value)))))
+        (apply-env var (cdr env) check args)))))
+                
 
 
 (define value-of
@@ -187,7 +227,7 @@
              [(equal? first 'statements) (let ([v1 (value-of (cadr tree) env check)]) 
                                           (if (equal? (car v1) 'return-value)
                                              v1
-                                             (value-of (caddr tree) (caddr v1) check)))] 
+                                             (value-of (caddr tree) (cadr v1) check)))] 
              [(equal? first 'assignment) (let ([left-value (cadr tree)]
                                                [right-expression (caddr tree)])
                                                        (list 'env (extend-env (cadr left-value) right-expression (caddr left-value) env)))]
@@ -196,9 +236,9 @@
              [(equal? first 'pass) (list 'env env)]
              [(equal? first 'def-stmt) (list 'env
                                              (extend-env (cadr tree) (list (cadr (cdddr tree))
-                                                                      (value-of (caddr tree) env check)) (cadddr tree) env))]
+                                                                      (value-of (caddr tree) env check)) (function (cadddr tree)) env))]
              [(equal? first 'def-with-no-param-stmt) (list 'env (extend-env (cadr tree) (list (cadddr tree) (empty-env))
-                                                                                        (caddr tree) env))]
+                                                                                        (function (caddr tree)) env))]
              [(equal? first 'params) (append (value-of (cadr tree) env check) (value-of (caddr tree) env check))]
              [(equal? first 'param-assignment) (let ([left-value (cadr tree)]
                                                          [right-exp (caddr tree)])
@@ -289,7 +329,7 @@
                                             (if (or (equal? (caddr v1) "int") (equal? (caddr v1) "float"))
                                                 (if (= (cadr v1) 0)
                                                 v1
-                                                (let ([v2 (value-f (caddr tree) env check)])
+                                                (let ([v2 (value-of (caddr tree) env check)])
                                                   (if (equal? (caddr v1) (caddr v2))
                                                       (list 'value (* (cadr v1) (cadr v2)) (caddr v1))
                                                       (error "error: operands for * shoud be the same type"))))
@@ -309,13 +349,13 @@
                                                        (list 'value (/ (cadr v1) (cadr v2)) (caddr v1)))
                                                    (error "error: operands for / should be the same type"))
                                                (error "error: not numberic operands for / operator")))]
-             [(equal first 'plus-factor) (let ([v1 (value-of (cadr tree) env check)])
+             [(equal? first 'plus-factor) (let ([v1 (value-of (cadr tree) env check)])
                                            (if (or (equal? (caddr v1) "int")
                                                    (equal? (caddr v1) "float"))
                                                v1
                                                (error "operand for + factor should be numeric")))]
 
-             [(equal first 'minus-factor) (let ([v1 (value-of (cadr tree) env check)])
+             [(equal? first 'minus-factor) (let ([v1 (value-of (cadr tree) env check)])
                                            (if (or (equal? (caddr v1) "int")
                                                    (equal? (caddr v1) "float"))
                                                (list 'value (- 0 (cadr v1)) (caddr v1))
@@ -331,10 +371,40 @@
                                             (list 'value (- (cadr v1) (cadr v2)) "float")
                                             (error "error: not appropariate type for minus operator"))))]
 
+             [(equal? first 'primary-expression) (let ([l1 (value-of (cadr tree) env check)]
+                                                       [v1 (value-of (caddr tree) env check)])
+                                                   (if (and
+                                                        (equal? (caddr v1) "int")
+                                                        (equal? (caddr l1) "list"))
+                                                       (list-ref (cadr l1) (cadr v1))
+                                                       (error "index of primary expression must be integer")))]
+
              
+
+             [(equal? first 'primary-no-arg) (apply-env (cadr tree) env check)]
+             [(equal? first 'primary-with-args) (apply-env (cadr tree) env check (value-of (cadr tree)))]
+
+             [(equal? first 'argument) (list 'value (list (value-of (cadr tree) env check)) "list")]
+             [(equal? first 'arguments) (let ([v1 (value-of (cadr tree) env check)]
+                                              [v2 (value-of (caddr tree) env check)])
+                                          (list 'value (append (cadr v1) (list v2)) "list"))]
+
+             [(equal? first 'id) (apply-env (cadr tree) env check)]
+
+             [(equal? first 'empty-list) (list 'value (list) "list")]
+
+             [(equal? first 'expression) (list 'value (list (value-of (cadr tree) env check)) "list")]
+             [(equal? first 'expressions) (let ([v1 (value-of (cadr tree) env check)]
+                                                             [v2 (value-of (caddr tree) env check)])
+                                                         (list 'value (append (cadr v1) (list (cadr v2))) "list"))]
+      
+                                              
+             
+                                                   
                                  
 
              [(equal? first 'value) tree]
+             [(equal? first 'print) (display (value-of (cadr tree) env check))]
 
                                            
              
@@ -350,7 +420,7 @@
 
 ;test
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
-(define my-lexer (lex-this simple-math-lexer (open-input-string "if True: a = 3 + 4; else: b = 2;;")))
+(define my-lexer (lex-this simple-math-lexer (open-input-string "b = 4;a = b + 3;print(a);")))
 (let ((parser-res (parse my-lexer)))
   (let ([tree (car parser-res)]
     [check (cadr parser-res)])
