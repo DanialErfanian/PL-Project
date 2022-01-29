@@ -19,7 +19,6 @@
    ("=" (token-assign))
    ("return" (token-return))
    ("def" (token-def))
-   ("():" (token-no-arguments))
    ("(" (token-open-paranthesis))
    (")" (token-close-paranthesis))
    (":" (token-colon))
@@ -51,7 +50,7 @@
    ((eof) (token-EOF))))
 
 (define-tokens non-empties (int float bool type ID))
-(define-empty-tokens empties (EOF plus minus semicolon mult div power-sign if assign return def no-arguments
+(define-empty-tokens empties (EOF plus minus semicolon mult div power-sign if assign return def
                                  open-paranthesis close-paranthesis colon comma for in or and not equals less-than greater-than
                                  open-bracket close-bracket open-close-paranthesis open-close-brackets arrow checked pass else none print))
 
@@ -184,8 +183,6 @@
 
 (define apply-env
   (lambda (var env check [args `()])
-    (if (equal? var "print")
-        (display (value-of (list 'id var) env check))
     (if (equal? var (caar env))
         (let ([elem (car env)])
           (let ([type (caddr elem)])
@@ -216,7 +213,7 @@
                               value
                               (error (string-append "error: type of " var " must be " type "."))))
                       value)))))
-        (apply-env var (cdr env) check args)))))
+        (apply-env var (cdr env) check args))))
                 
 
 
@@ -381,7 +378,7 @@
 
              
 
-             [(equal? first 'primary-no-arg) (apply-env (cadr tree) env check)]
+             [(equal? first 'primary-no-arg) (apply-env (cadadr tree) env check)]
              [(equal? first 'primary-with-args) (apply-env (cadr tree) env check (value-of (cadr tree)))]
 
              [(equal? first 'argument) (list 'value (list (value-of (cadr tree) env check)) "list")]
@@ -420,11 +417,11 @@
 
 ;test
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
-(define my-lexer (lex-this simple-math-lexer (open-input-string "b = 4;a = b + 3;print(a);")))
+(define my-lexer (lex-this simple-math-lexer (open-input-string "def f() : a = 3 + 5 * 2; return a + 3;;print(f());")))
 (let ((parser-res (parse my-lexer)))
   (let ([tree (car parser-res)]
     [check (cadr parser-res)])
     (begin
-      (display tree)
+   ;   (display tree)
   (value-of tree (empty-env) check))))
 
