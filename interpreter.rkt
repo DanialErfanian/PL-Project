@@ -411,13 +411,10 @@
 ;test
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
 
-(define my-lexer (lex-this simple-math-lexer (open-input-string "
-def f(n = 1, m = 1, p =2):
-return n + m * p;;
+(define code_address (vector-ref (current-command-line-arguments) 0))
+(define code_input (with-input-from-file code_address (lambda () (read-string 1000))))
 
-print(f(2, 4, 5));
-
-")))
+(define my-lexer (lex-this simple-math-lexer (open-input-string code_input)))
 (let ((parser-res (parse my-lexer)))
   (let ([tree (car parser-res)]
     [check (cadr parser-res)])
