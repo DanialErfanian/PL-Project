@@ -39,12 +39,13 @@
    ("checked" (token-checked))
    ("pass" (token-pass))
    ("else" (token-else))
-   ("None" (token-none))
    ("print" (token-print))
+   ("None" (token-none))
    ((:or "int" "float" "bool" "list" "None") (token-type lexeme))
    ((:or "True" "False") (token-bool lexeme))
    ((:+ (:: (:or (char-range #\a #\z)
-                 (char-range #\A #\Z))))
+                 (char-range #\A #\Z)
+                 #\_)))
         (token-ID lexeme))
    (whitespace (simple-math-lexer input-port))
    ((eof) (token-EOF))))
@@ -63,7 +64,7 @@
    (grammar
     (program
      ((statements) (list $1 #f))
-     ((checked statements) (append $2 #t)))
+     ((checked statements) (list $2 #t)))
     (statements
      ((statement semicolon) $1)
      ((statements statement semicolon) (list 'statements $1 $2)))
@@ -85,8 +86,8 @@
      ((return) (list 'return))
      ((return expression) (list 'return-stmt $2)))
     (function-def
-     ((def ID open-paranthesis params close-paranthesis return-type statements) (list 'def-stmt $2 $4 $6 $7))
-     ((def ID open-close-paranthesis return-type statements) (list 'def-with-no-param-stmt $2 $4 $5)))
+     ((def ID open-paranthesis params close-paranthesis return-type statements) (list 'def-stmt $2 $4 $6 (list 'statements $7 (list 'return))))
+     ((def ID open-close-paranthesis return-type statements) (list 'def-with-no-param-stmt $2 $4 (list 'statements $5 (list 'return)))))
     (params
      ((param-with-default) $1)
      ((params comma param-with-default) (list 'params $1 $3)))
@@ -142,11 +143,11 @@
      ((primary open-paranthesis arguments close-paranthesis) (list 'primary-with-args $1 $3)))
     (arguments
      ((expression) (list 'argument $1))
-     ((arguments comma expression) (list 'arguments $1 $3)))
+     ((arguments comma expression) (list 'arguments $1 (list 'argument $3))))
     (atom
      ((ID) (list 'id $1))
      ((bool) (list 'value $1 "bool"))
-     ((none) (list 'value 'none "None"))
+     ((none) (list 'value "None" "None"))
      ((number) $1)
      ((lst) $1))
     (number
@@ -156,11 +157,12 @@
      ((open-bracket expressions close-bracket) $2)
      ((open-bracket close-bracket) (list 'empty-list `())))
     (expressions
-     ((expressions comma expression) (list 'expressions $1 $3))
+     ((expressions comma expression) (list 'expressions $1  (list 'expression $3)))
      ((expression) (list 'expression $1)))
     (assignment-lhs
      ((ID) (list 'id-value $1 "undefined"))
-     ((ID colon type) (list 'id-value $1 $3)))
+     ((ID colon type) (list 'id-value $1 $3))
+     ((ID colon none) (list 'id-value $1 "None")))
     (return-type
      ((colon) "undefined")
      ((arrow type colon) $2))
@@ -183,6 +185,7 @@
 
 (define apply-env
   (lambda (var env check [args `()])
+    (begin ;(display env) (display "\n")
     (if (equal? var (caar env))
         (let ([elem (car env)])
           (let ([type (caddr elem)])
@@ -192,28 +195,29 @@
                       (if check
                           (if (equal? type "undefined")
                               value
-                              (if (equal? type (caddr value))
+                              (if (equal? (function-output-type type) (caddr value))
                                   value
                                   (error (string-append "error: type of " var " must be " type "."))))
                           value))
-                    (let ([new-env (map change-value args (cadadr elem))])
+                    (let ([new-env (map change-value (cadr args) (cadadr elem))])
                       (let ([value (value-of (caadr elem) (append new-env env) check)])
                         (if check
-                            (if (equal? type "undefined")
+                            (if (equal? (function-output-type type) "undefined")
                                 value
-                                (if (equal? type (caddr value))
+                                (if (equal? (function-output-type type) (caddr value))
                                     value
-                                    (error (string-append "error: type of " var " must be " type "."))))
+                                    (error (string-append "error: type of " var " must be " (function-output-type type) "."))))
                             value))))
                 (let [(value (value-of (cadr elem) (cdr env) check))]
                   (if check
+                      (begin; (display elem) (display var) (display "\n")
                       (if (equal? type "undefined")
                           value
                           (if (equal? type (caddr value))
                               value
-                              (error (string-append "error: type of " var " must be " type "."))))
+                              (error (string-append "error: type of " var " must be " type ".")))))
                       value)))))
-        (apply-env var (cdr env) check args))))
+        (apply-env var (cdr env) check args)))))
                 
 
 
@@ -222,14 +226,15 @@
            (let ([first (car tree)])
            (cond
              [(equal? first 'statements) (let ([v1 (value-of (cadr tree) env check)]) 
-                                          (if (equal? (car v1) 'return-value)
+                                          (if (equal? (car v1) 'value)
                                              v1
                                              (value-of (caddr tree) (cadr v1) check)))] 
              [(equal? first 'assignment) (let ([left-value (cadr tree)]
                                                [right-expression (caddr tree)])
                                                        (list 'env (extend-env (cadr left-value) right-expression (caddr left-value) env)))]
-             [(equal? first 'return) (list 'return-value (list 'none "None"))]
-             [(equal? first 'return-stmt) (list 'return-value (value-of (cadr tree) env check))]
+             [(equal? first 'return) (list 'value "None" "None")]
+             [(equal? first 'return-stmt) (value-of (cadr tree) env check)]
+                                            
              [(equal? first 'pass) (list 'env env)]
              [(equal? first 'def-stmt) (list 'env
                                              (extend-env (cadr tree) (list (cadr (cdddr tree))
@@ -251,10 +256,11 @@
                                              ('env env)
                                              (let ([new-env (extend-env (cadr tree) (cadr v1) (caddr v1) env)])
                                                (let ([v2 (value-of (cadddr tree) new-env check)])
-                                             (if (equal? (car v2) 'return-value)
+                                                 (begin; (display v1)
+                                             (if (equal? (car v2) 'value)
                                                  v2
                                              (value-of (list 'for-stmt (cadr tree) (list 'value (cdadr v1) "list") (cadddr tree))
-                                                             (cadr v2)))))))]
+                                                             (cadr v2))))))))]
              [(equal? first 'dis-or-con) (let ([v1 (value-of (cadr tree) env check)]
                                                [v2 (value-of (caddr tree) env check)])
                                            (if (and (equal? (caddr v1) "bool")
@@ -379,12 +385,13 @@
              
 
              [(equal? first 'primary-no-arg) (apply-env (cadadr tree) env check)]
-             [(equal? first 'primary-with-args) (apply-env (cadr tree) env check (value-of (cadr tree)))]
+             [(equal? first 'primary-with-args) (apply-env (cadadr tree) env check (value-of (caddr tree) env check))]
+                                                  
 
              [(equal? first 'argument) (list 'value (list (value-of (cadr tree) env check)) "list")]
              [(equal? first 'arguments) (let ([v1 (value-of (cadr tree) env check)]
                                               [v2 (value-of (caddr tree) env check)])
-                                          (list 'value (append (cadr v1) (list v2)) "list"))]
+                                          (list 'value (append (cadr v1) (cadr v2)) "list"))]
 
              [(equal? first 'id) (apply-env (cadr tree) env check)]
 
@@ -393,35 +400,32 @@
              [(equal? first 'expression) (list 'value (list (value-of (cadr tree) env check)) "list")]
              [(equal? first 'expressions) (let ([v1 (value-of (cadr tree) env check)]
                                                              [v2 (value-of (caddr tree) env check)])
-                                                         (list 'value (append (cadr v1) (list (cadr v2))) "list"))]
-      
-                                              
-             
-                                                   
-                                 
+                                                         (list 'value (append (cadr v1) (list (cadr v2))) "list"))]        
 
              [(equal? first 'value) tree]
-             [(equal? first 'print) (display (value-of (cadr tree) env check))]
-
-                                           
-             
-                                             
-         ;    [(equal? first 'id) (cadr tree)]
-          ;   [(equal? first 'bool-value) tree]
-           ;  [(equal? first 'none) tree]
-           ;  [(equal? first 'int-value) tree]
-            ; [(equal? first 'float-value) tree]
-            ; [(equal? first 'primary-no-arg) (value-of (cadr tree) env)]
-            ; [(equal? first 'primary-with-args (value-of (cadr tree)))]
+             [(equal? first 'print) (begin
+                                     (display (value-of (cadr tree) env check)) (display "\n")
+                                     (list 'env env))]
              ))))
 
 ;test
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
-(define my-lexer (lex-this simple-math-lexer (open-input-string "def f() : a = 3 + 5 * 2; return a + 3;;print(f());")))
+
+(define my-lexer (lex-this simple-math-lexer (open-input-string "
+def f(n: int = 3):
+if n == 0: return 0;
+else: if n == 1: return 1;
+else: return f(n - 1) + f(n - 2);;;;
+
+print(f(10));
+
+
+")))
 (let ((parser-res (parse my-lexer)))
   (let ([tree (car parser-res)]
     [check (cadr parser-res)])
     (begin
-   ;   (display tree)
-  (value-of tree (empty-env) check))))
+     ; (display tree)
+  (value-of tree (empty-env) check)
+  (display ""))))
 
