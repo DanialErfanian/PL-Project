@@ -253,14 +253,14 @@
                                            (error "error: condition should be a bool value")))]
              [(equal? first 'for-stmt) (let ([v1 (value-of (caddr tree) env check)])
                                          (if (null? (cadr v1))
-                                             ('env env)
-                                             (let ([new-env (extend-env (cadr tree) (cadr v1) (caddr v1) env)])
+                                             (list 'env env)
+                                             (let ([new-env (extend-env (cadr tree) (caadr v1) (caddr v1) env)])
                                                (let ([v2 (value-of (cadddr tree) new-env check)])
                                                  (begin; (display v1)
                                              (if (equal? (car v2) 'value)
                                                  v2
                                              (value-of (list 'for-stmt (cadr tree) (list 'value (cdadr v1) "list") (cadddr tree))
-                                                             (cadr v2))))))))]
+                                                             env check)))))))]
              [(equal? first 'dis-or-con) (let ([v1 (value-of (cadr tree) env check)]
                                                [v2 (value-of (caddr tree) env check)])
                                            (if (and (equal? (caddr v1) "bool")
@@ -400,7 +400,7 @@
              [(equal? first 'expression) (list 'value (list (value-of (cadr tree) env check)) "list")]
              [(equal? first 'expressions) (let ([v1 (value-of (cadr tree) env check)]
                                                              [v2 (value-of (caddr tree) env check)])
-                                                         (list 'value (append (cadr v1) (list (cadr v2))) "list"))]        
+                                                         (list 'value (append (cadr v1) (cadr v2)) "list"))]        
 
              [(equal? first 'value) tree]
              [(equal? first 'print) (begin
@@ -412,13 +412,10 @@
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
 
 (define my-lexer (lex-this simple-math-lexer (open-input-string "
-def f(n: int = 3):
-if n == 0: return 0;
-else: if n == 1: return 1;
-else: return f(n - 1) + f(n - 2);;;;
+def f(n = 1, m = 1, p =2):
+return n + m * p;;
 
-print(f(10));
-
+print(f(2, 4, 5));
 
 ")))
 (let ((parser-res (parse my-lexer)))
