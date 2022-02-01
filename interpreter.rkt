@@ -183,6 +183,14 @@
   (lambda (new-val old-val)
     (list (car old-val) new-val (caddr old-val))))
 
+
+(define get-elem
+  (lambda (var env)
+    (if (equal? var (caar env))
+        (car env)
+        (get-elem var (cdr env)))))
+
+
 (define apply-env
   (lambda (var env check [args `()])
     (begin ;(display env) (display "\n")
@@ -231,7 +239,14 @@
                                              (value-of (caddr tree) (cadr v1) check)))] 
              [(equal? first 'assignment) (let ([left-value (cadr tree)]
                                                [right-expression (caddr tree)])
-                                                       (list 'env (extend-env (cadr left-value) right-expression (caddr left-value) env)))]
+                                           (if (equal? 'id (car right-expression))
+                                               (let ([right-elem (get-elem (cadr right-expression) env)])
+                                               (begin
+                                               (list 'env (extend-env (cadr left-value) (cadr right-elem)
+                                                                      (if (function? (caddr right-elem))
+                                                                          (function (caddr left-value))
+                                                                          (caddr left-value)) env))))
+                                                       (list 'env (extend-env (cadr left-value) right-expression (caddr left-value) env))))]
              [(equal? first 'return) (list 'value "None" "None")]
              [(equal? first 'return-stmt) (value-of (cadr tree) env check)]
                                             
@@ -404,17 +419,37 @@
 
              [(equal? first 'value) tree]
              [(equal? first 'print) (begin
-                                     (display (value-of (cadr tree) env check)) (display "\n")
+                                     (display (cadr(value-of (cadr tree) env check))) (display "\n")
                                      (list 'env env))]
              ))))
 
 ;test
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
 
-(define code_address (vector-ref (current-command-line-arguments) 0))
-(define code_input (with-input-from-file code_address (lambda () (read-string 1000))))
+(define my-lexer (lex-this simple-math-lexer (open-input-string "
+checked
+def f(n: int = 1) -> int:
+    a: int = n;
+    b: int = n + 1;
+    return a ** b;
+;
 
-(define my-lexer (lex-this simple-math-lexer (open-input-string code_input)))
+def g() -> bool:
+    c :bool = 1 < 7 and 13 > 17 or 1 == 1;
+    print(1 < 7 and 13 > 17 or 1 == 1);
+    return c;
+;
+
+l: int = [1, 3, 5, 7];
+
+if g():
+    print(l[3]);
+else:
+    print(l[2]);
+;
+
+
+")))
 (let ((parser-res (parse my-lexer)))
   (let ([tree (car parser-res)]
     [check (cadr parser-res)])
@@ -422,4 +457,3 @@
      ; (display tree)
   (value-of tree (empty-env) check)
   (display ""))))
-
