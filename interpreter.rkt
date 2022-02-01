@@ -199,7 +199,7 @@
           (let ([type (caddr elem)])
             (if (function? type)
                 (if (null? args)
-                    (let ([value (value-of (caadr elem) env check)])
+                    (let ([value (value-of (caadr elem) (append (cadadr elem) env) check)])
                       (if check
                           (if (equal? type "undefined")
                               value
@@ -427,27 +427,11 @@
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
 
 (define my-lexer (lex-this simple-math-lexer (open-input-string "
-checked
-def f(n: int = 1) -> int:
-    a: int = n;
-    b: int = n + 1;
-    return a ** b;
+def f(n = 2):
+print(n);
 ;
 
-def g() -> bool:
-    c :bool = 1 < 7 and 13 > 17 or 1 == 1;
-    print(1 < 7 and 13 > 17 or 1 == 1);
-    return c;
-;
-
-l: int = [1, 3, 5, 7];
-
-if g():
-    print(l[3]);
-else:
-    print(l[2]);
-;
-
+a = f();
 
 ")))
 (let ((parser-res (parse my-lexer)))
