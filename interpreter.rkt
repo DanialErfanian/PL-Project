@@ -190,6 +190,14 @@
         (car env)
         (get-elem var (cdr env)))))
 
+(define resize
+  (lambda (defaults new-args)
+    (let ([l1 (length new-args)]
+          [l2 (length defaults)])
+    (if (= l1 l2)
+        new-args
+        (resize defaults (append new-args (list (cadr (list-ref defaults l1)))))))))
+
 
 (define apply-env
   (lambda (var env check [args `()])
@@ -198,16 +206,9 @@
         (let ([elem (car env)])
           (let ([type (caddr elem)])
             (if (function? type)
-                (if (null? args)
-                    (let ([value (value-of (caadr elem) (append (cadadr elem) env) check)])
-                      (if check
-                          (if (equal? type "undefined")
-                              value
-                              (if (equal? (function-output-type type) (caddr value))
-                                  value
-                                  (error (string-append "error: type of " var " must be " type "."))))
-                          value))
-                    (let ([new-env (map change-value (cadr args) (cadadr elem))])
+                    (let ([new-env (map change-value (resize (cadadr elem) (if (null? args)
+                                                                               args
+                                                                               (cadr args))) (cadadr elem))])
                       (let ([value (value-of (caadr elem) (append new-env env) check)])
                         (if check
                             (if (equal? (function-output-type type) "undefined")
@@ -215,7 +216,7 @@
                                 (if (equal? (function-output-type type) (caddr value))
                                     value
                                     (error (string-append "error: type of " var " must be " (function-output-type type) "."))))
-                            value))))
+                            value)))
                 (let [(value (value-of (cadr elem) (cdr env) check))]
                   (if check
                       (begin; (display elem) (display var) (display "\n")
@@ -427,12 +428,11 @@
 (define lex-this (lambda (lexer input) (lambda () (lexer input))))
 
 (define my-lexer (lex-this simple-math-lexer (open-input-string "
-def f(n = 2):
+def f(n = 2, m = 4):
 print(n);
+print(m);
 ;
-
-a = f();
-
+print(f());
 ")))
 (let ((parser-res (parse my-lexer)))
   (let ([tree (car parser-res)]
