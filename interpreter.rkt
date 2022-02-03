@@ -425,19 +425,18 @@
              ))))
 
 ;test
-(define lex-this (lambda (lexer input) (lambda () (lexer input))))
-
-(define my-lexer (lex-this simple-math-lexer (open-input-string "
-def f(n = 2, m = 4):
-print(n);
-print(m);
-;
-print(f());
-")))
-(let ((parser-res (parse my-lexer)))
-  (let ([tree (car parser-res)]
-    [check (cadr parser-res)])
-    (begin
-     ; (display tree)
-  (value-of tree (empty-env) check)
-  (display ""))))
+(define evaluate (lambda (code_address)
+                   (let* ([code_input (with-input-from-file code_address (lambda () (read-string 1000)))]
+                         [lex-this (lambda (lexer input) (lambda () (lexer input)))]
+                         [my-lexer (lex-this simple-math-lexer (open-input-string code_input))]
+                         [parser-res (parse my-lexer)]
+                         [tree (car parser-res)]
+                         [check (cadr parser-res)])
+                     (begin
+                       ; (display tree)
+                       (value-of tree (empty-env) check)
+                       (display ""))))
+  )
+(define code_address (vector-ref (current-command-line-arguments) 0))
+(evaluate code_address)
+;(evaluate "tests/1.in")
