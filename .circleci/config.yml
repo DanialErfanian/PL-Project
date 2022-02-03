@@ -16,22 +16,22 @@ jobs:
       - checkout
       - run:
           name: "Test 1"
-          command: "diff -u tests/out1.txt <(racket interpreter.rkt tests/in1.txt)"
+          command: "diff -Bbq -u tests/out1.txt <(racket interpreter.rkt tests/in1.txt)"
       - run:
           name: "Test 5"
-          command: "diff -u tests/out5.txt <(racket interpreter.rkt tests/in5.txt)"
+          command: "diff -Bbq -u tests/out5.txt <(racket interpreter.rkt tests/in5.txt)"
       - run:
           name: "Test 7"
-          command: "diff -u tests/out7.txt <(racket interpreter.rkt tests/in7.txt)"
+          command: "diff -Bbq -u tests/out7.txt <(racket interpreter.rkt tests/in7.txt)"
       - run:
           name: "Test 12"
-          command: "diff -u tests/out12.txt <(racket interpreter.rkt tests/in7.txt)"
+          command: "diff -Bbq -u tests/out12.txt <(racket interpreter.rkt tests/in7.txt)"
       - run:
           name: "Test 13"
-          command: "diff -u tests/out13.txt <(racket interpreter.rkt tests/in13.txt)"
+          command: "diff -Bbq -u tests/out13.txt <(racket interpreter.rkt tests/in13.txt)"
       - run:
           name: "Test 14"
-          command: "diff -u tests/out14.txt <(racket interpreter.rkt tests/in14.txt)"
+          command: "diff -Bbq -u tests/out14.txt <(racket interpreter.rkt tests/in14.txt)"
 
 
 # Invoke jobs via workflows
